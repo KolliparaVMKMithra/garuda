@@ -1,0 +1,46 @@
+{
+  "recordings": [
+    {
+      "id": "rec_call-mafavys_1748000110698_8711d554",
+      "callId": "call-mafavys",
+      "participants": [
+        "3XFvX1rS59HPvUq4AAAM"
+      ],
+      "timestamp": 1748000110703,
+      "accessCount": 0,
+      "lastAccessed": null
+    },
+    {
+      "id": "rec_call-b5i6qxt_1748000133732_ae23355d",
+      "callId": "call-b5i6qxt",
+      "participants": [
+        "_rRVXE4w6sWWBvAMAAAO"
+      ],
+      "timestamp": 1748000133737,
+      "accessCount": 0,
+      "lastAccessed": null
+    },
+    {
+      "id": "rec_call-0tlpkin_1748001032335_608d97bb",
+      "callId": "call-0tlpkin",
+      "participants": [
+        "yLBffaHYsK8eIg66AAAN"
+      ],
+      "timestamp": 1748001032343,
+      "accessCount": 0,
+      "lastAccessed": null
+    },
+    {
+      "id": "rec_call-vp3b17n_1748001761231_371e734e",
+      "callId": "call-vp3b17n",
+      "participants": [
+        "T5VHBy30ifjGYIt4AAAP",
+        "LOxVwu1qjmpsmwXyAAAJ"
+      ],
+      "timestamp": 1748001761244,
+      "accessCount": 0,
+      "lastAccessed": null
+    }
+  ],
+  "lastUpdated": 1748001761244
+}
