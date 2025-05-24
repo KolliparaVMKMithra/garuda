@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Twilio Test Page</title>
+</head>
+<body>
+    <h1>Twilio Test Page</h1>
+    <p>If you can see this page, your server is running correctly.</p>
+    <p>Use the button below to test if Twilio can reach your webhook:</p>
+    <button id="testButton">Test Twilio Webhook</button>
+    <div id="result" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;"></div>
+
+    <script>
+        document.getElementById('testButton').addEventListener('click', function() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing webhook...';
+            
+            fetch('/test-webhook', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    From: '+1234567890',
+                    CallSid: 'TEST12345',
+                    test: true
+                })
+            })
+            .then(response => response.text())
+            .then(data => {
+                resultDiv.innerHTML = 'Test successful! Response: <pre>' + data + '</pre>';
+            })
+            .catch(error => {
+                resultDiv.innerHTML = 'Test failed: ' + error;
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,278 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+    line-height: 1.6;
+    padding: 20px;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 25px;
+}
+
+h1 {
+    text-align: center;
+    color: #1a73e8;
+    margin-bottom: 25px;
+}
+
+h3 {
+    margin-bottom: 15px;
+    color: #444;
+}
+
+/* Main sections */
+.main-controls, .feature-section, .status-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+/* Call controls */
+.call-section {
+    margin-bottom: 15px;
+}
+
+.join-controls {
+    display: flex;
+    gap: 10px;
+}
+
+/* Status display */
+.status-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #e8f0fe;
+}
+
+.status-text {
+    font-weight: bold;
+}
+
+.recording-status {
+    display: flex;
+    align-items: center;
+}
+
+.recording-indicator {
+    color: red;
+    font-size: 20px;
+    animation: blink 1s infinite;
+    margin-right: 8px;
+}
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Audio options */
+.option-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.file-section {
+    background-color: #fff;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+
+.file-input {
+    width: 100%;
+    margin: 10px 0;
+}
+
+.player-container {
+    margin-top: 15px;
+}
+
+.player-controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+audio {
+    width: 100%;
+    display: block;
+    margin-bottom: 10px;
+}
+
+/* Remote audio styling */
+.remote-audio-container {
+    padding: 15px;
+    background-color: #f0f7ff;
+    border: 1px solid #c7d8f2;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.remote-user-label {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #1a73e8;
+}
+
+/* Lists */
+.requests-list, .participants-list {
+    list-style: none;
+}
+
+.requests-list li, .participants-list li {
+    padding: 10px;
+    margin-bottom: 8px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+}
+
+.requests-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.approval-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.primary-btn {
+    background-color: #1a73e8;
+    color: white;
+}
+
+.primary-btn:hover {
+    background-color: #1557b0;
+}
+
+.end-btn {
+    background-color: #f44336;
+    color: white;
+    width: 100%;
+    padding: 12px;
+}
+
+.end-btn:hover {
+    background-color: #d32f2f;
+}
+
+.option-btn {
+    background-color: #f1f3f4;
+    color: #444;
+}
+
+.option-btn:hover {
+    background-color: #e8eaed;
+}
+
+.option-btn.active {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.control-btn {
+    background-color: #f1f3f4;
+    color: #444;
+}
+
+.approve-btn {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.reject-btn {
+    background-color: #f44336;
+    color: white;
+}
+
+.fix-btn {
+    background-color: #ff9800;
+    color: white;
+    margin-left: 10px;
+    font-weight: bold;
+}
+
+.fix-btn:hover {
+    background-color: #e68a00;
+}
+
+.btn:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* Input fields */
+.input-field {
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    flex: 1;
+}
+
+/* Remote audio styling */
+.remote-audio-container {
+    background-color: #f0f7ff;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 1px solid #c7d7f0;
+}
+
+.remote-user-label {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #1a73e8;
+}
+
+.remote-audio-container audio {
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+/* Empty state messages */
+#pendingCallsList:empty:after {
+    content: 'No pending requests';
+    color: #888;
+    font-style: italic;
+    display: block;
+    padding: 10px;
+}
+
+#participantsList:empty:after {
+    content: 'No participants yet';
+    color: #888;
+    font-style: italic;
+    display: block;
+    padding: 10px;
+}

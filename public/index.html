@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberSecure Voice | Encrypted Communications</title>
+    <link rel="stylesheet" href="cyber-styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="cyber-matrix" id="matrix-canvas"></div>
+    <div class="cyber-scanner"></div>
+    <div class="container">
+        <div class="cyber-badge"><i class="fas fa-shield-alt"></i></div>
+        <h1 class="glitch-text">GARUDA</h1>
+        <h4 class="glitch-text">Emotion-Intelligent Sentinel for Real-Time Threat Detection and Emergency Response</h4>
+
+        <div class="encryption-animation">Establishing secure connection...</div>
+        
+        <!-- Audio Options (Now on dashboard) -->
+        <div id="audioOptions" class="feature-section">
+            <h3><i class="fas fa-microphone-alt"></i> Audio Source</h3>
+            <div class="option-buttons">
+                <button id="useMic" class="btn option-btn active"><i class="fas fa-microphone"></i> Use Microphone</button>
+                <button id="useAudioFile" class="btn option-btn"><i class="fas fa-file-audio"></i> Use Audio File</button>
+            </div>
+            
+            <div id="audioFileSection" class="file-section" style="display: none;">
+                <input type="file" id="audioFileInput" accept="audio/*" class="file-input">
+                <div id="audioPlayerContainer" class="player-container" style="display: none;">
+                    <audio id="audioPlayer" controls></audio>
+                    <div class="player-controls">
+                        <button id="playAudio" class="btn control-btn"><i class="fas fa-play"></i> Play</button>
+                        <button id="pauseAudio" class="btn control-btn"><i class="fas fa-pause"></i> Pause</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Basic Call Controls -->
+        <div class="main-controls">
+            <div class="call-section">
+                <h3><i class="fas fa-phone-alt"></i> Start a New Call</h3>
+                <button id="startCall" class="btn primary-btn"><i class="fas fa-phone-alt"></i> Start New Call</button>
+            </div>
+            
+            <div class="call-section">
+                <h3><i class="fas fa-sign-in-alt"></i> Join Existing Call</h3>
+                <div class="join-controls">
+                    <input type="text" id="callIdInput" placeholder="Enter Call ID" class="input-field">
+                    <button id="joinCall" class="btn primary-btn"><i class="fas fa-sign-in-alt"></i> Join Call</button>
+                </div>
+            </div>
+            
+            <div class="call-section">
+                <button id="endCall" class="btn end-btn" disabled><i class="fas fa-phone-slash"></i> End Call</button>
+            </div>
+        </div>
+        
+        <!-- Status Display -->
+        <div class="status-section">
+            <p id="statusText" class="status-text"><i class="fas fa-circle-notch"></i> Status: Disconnected</p>
+            <p id="callIdDisplay" class="call-id"></p>
+            <div id="recordingStatus" class="recording-status">
+                <span id="recordingIndicator" class="recording-indicator">●</span> Recording in progress
+            </div>
+        </div>
+        
+        <!-- In-Call Audio Controls -->
+        <div id="inCallAudioControls" class="feature-section" style="display: none;">
+            <h3><i class="fas fa-sliders-h"></i> In-Call Audio Controls</h3>
+            <div class="player-controls">
+                <button id="sendAudio" class="btn primary-btn"><i class="fas fa-paper-plane"></i> Send Audio to Call</button>
+            </div>
+        </div>
+        
+        <!-- Call Approval Section -->
+        <div id="callApprovalSection" class="feature-section">
+            <h3><i class="fas fa-user-shield"></i> Call Requests</h3>
+            <ul id="pendingApprovals" class="approvals-list">
+                <!-- Pending approvals will be added here dynamically -->
+            </ul>
+        </div>
+        
+        <!-- Recording Status -->
+        <div id="recordingStatus" class="feature-section">
+            <h3><i class="fas fa-record-vinyl"></i> Recording Status</h3>
+            <p id="recordingText">Recording: Not started</p>
+        </div>
+        
+        <!-- Secure Recordings Section -->
+        <div id="recordingsSection" class="feature-section">
+            <h3><i class="fas fa-lock"></i> Secure Recordings</h3>
+            <p>Your call recordings are end-to-end encrypted for maximum security.</p>
+            <p>Only call participants with valid access tokens can decrypt and access recordings.</p>
+            <div class="security-features">
+                <div class="security-feature">
+                    <h4><i class="fas fa-key"></i> End-to-End Encryption</h4>
+                    <p>All audio data is encrypted using AES-256-GCM</p>
+                </div>
+                <div class="security-feature">
+                    <h4><i class="fas fa-user-lock"></i> Access Control</h4>
+                    <p>Only authorized participants can access recordings</p>
+                </div>
+                <div class="security-feature">
+                    <h4><i class="fas fa-signature"></i> Integrity Verification</h4>
+                    <p>Digital signatures ensure recordings haven't been tampered with</p>
+                </div>
+            </div>
+            <div id="recordingsList" class="recordings-list">
+                <!-- Recordings will be added here dynamically -->
+            </div>
+        </div>
+        
+        <!-- Participants Section -->
+        <div class="feature-section">
+            <h3><i class="fas fa-users"></i> Connected Participants</h3>
+            <ul id="participantsList" class="participants-list"></ul>
+        </div>
+
+        <!-- Emotion Analysis Dashboard Link -->
+        <div class="feature-section">
+            <h3><i class="fas fa-brain"></i> Voice Emotion Analysis</h3>
+            <div class="emotion-analysis-button">
+                <a href="https://683140129d9d70eb501420c6--jade-nasturtium-8f6d81.netlify.app/" class="btn primary-btn" target="_blank" rel="noopener noreferrer"><i class="fas fa-brain"></i> Go to Emotion Analysis Dashboard</a>
+            </div>
+        </div>
+
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+    <script src="ringtone.js"></script>
+    <script src="client.js"></script>
+    <script>
+        // Matrix effect for cyber background
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.createElement('canvas');
+            const matrix = document.querySelector('.cyber-matrix');
+            matrix.appendChild(canvas);
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+            const fontSize = 14;
+            const columns = canvas.width / fontSize;
+            
+            const drops = [];
+            for (let i = 0; i < columns; i++) {
+                drops[i] = Math.floor(Math.random() * canvas.height / fontSize);
+            }
+            
+            function draw() {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#00ffff';
+                ctx.font = fontSize + 'px monospace';
+                
+                for (let i = 0; i < drops.length; i++) {
+                    const text = chars[Math.floor(Math.random() * chars.length)];
+                    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                    
+                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                        drops[i] = 0;
+                    }
+                    
+                    drops[i]++;
+                }
+            }
+            
+            setInterval(draw, 35);
+            
+            // Add audio wave animation
+            const playerContainer = document.getElementById('audioPlayerContainer');
+            if (playerContainer) {
+                const audioWave = document.createElement('div');
+                audioWave.className = 'audio-wave';
+                audioWave.innerHTML = '<span></span><span></span><span></span><span></span><span></span>';
+                playerContainer.appendChild(audioWave);
+            }
+        });
+    </script>
+    <script>
+        // Ensure buttons are properly initialized after page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const startCallBtn = document.getElementById('startCall');
+            if (startCallBtn) {
+                startCallBtn.addEventListener('click', function() {
+                    if (typeof initiateCall === 'function') {
+                        initiateCall(true);
+                    } else {
+                        console.error('initiateCall function not found');
+                    }
+                });
+            } else {
+                console.error('startCall button not found');
+            }
+            
+            const joinCallBtn = document.getElementById('joinCall');
+            if (joinCallBtn) {
+                joinCallBtn.addEventListener('click', function() {
+                    if (typeof initiateCall === 'function') {
+                        initiateCall(false);
+                    } else {
+                        console.error('initiateCall function not found');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
