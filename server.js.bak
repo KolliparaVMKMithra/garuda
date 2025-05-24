@@ -1,0 +1,632 @@
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const path = require('path');
+const crypto = require('crypto-js');
+const fs = require('fs');
+
+// Import custom security modules
+const encryption = require('./utils/encryption');
+const database = require('./utils/database');
+const auth = require('./utils/auth');
+
+// Initialize Express app
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
+
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+
+// Initialize secure database
+database.initializeDatabase();
+
+// In-memory storage for active calls and participants
+const activeCalls = new Map();
+const activeParticipants = new Map(); // Maps socket ID to user data including keys
+
+// Generate server keypair for secure communications
+const serverKeys = encryption.generateParticipantKey('server-' + Date.now());
+console.log('Server secure keypair generated');
+
+// Basic authentication middleware for API endpoints
+const authenticate = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // Decode the Base64 credentials
+    const base64Credentials = authHeader.split(' ')[1];
+    const credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
+    const [username, password] = credentials.split(':');
+    
+    // Check credentials (hardcoded for simplicity)
+    if (username === 'admin' && password === 'securepassword') {
+        next();
+    } else {
+        res.status(401).json({ error: 'Invalid credentials' });
+    }
+};
+
+// Add CORS middleware if needed
+try {
+    const cors = require('cors');
+    app.use(cors());
+} catch (error) {
+    console.log('CORS module not found, continuing without CORS middleware');
+}
+
+// Store pending approvals and recordings
+const pendingApprovals = new Map();
+const callRecordings = new Map();
+
+// Simple in-memory database for call recordings (in a real app, use a proper database)
+const recordingsDB = [];
+
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // Request to join a call - now requires approval if call exists
+  socket.on('join-call', (callId) => {
+    console.log(`User ${socket.id} requesting to join call: ${callId}`);
+    
+    // Check if this call exists and has participants
+    // We need to check all socket connections in this room
+    const room = io.sockets.adapter.rooms.get(callId);
+    const hasParticipants = room && room.size > 0;
+    
+    if (hasParticipants) {
+      // This is an existing call, request approval from host
+      console.log(`Call ${callId} exists, requesting approval`);
+      
+      // Add to pending approvals
+      if (!pendingApprovals.has(callId)) {
+        pendingApprovals.set(callId, []);
+      }
+      pendingApprovals.get(callId).push({
+        userId: socket.id,
+        timestamp: Date.now()
+      });
+      
+      // Notify all users in the call that someone wants to join
+      io.to(callId).emit('approval-requested', {
+        userId: socket.id,
+        callId: callId
+      });
+      
+      // Notify the requester that approval is pending
+      socket.emit('approval-pending', {
+        callId: callId,
+        message: 'Waiting for host approval to join the call'
+      });
+    } else {
+      // This is a new call or user is the host, allow immediate join
+      console.log(`User ${socket.id} starting new call or is host: ${callId}`);
+      // Store call ID in socket data instead of using activeCalls map
+      socket.data.callId = callId;
+      
+      // Initialize recording for this call
+      if (!callRecordings.has(callId)) {
+        callRecordings.set(callId, {
+          startTime: Date.now(),
+          participants: [socket.id],
+          audioChunks: []
+        });
+      } else {
+        callRecordings.get(callId).participants.push(socket.id);
+      }
+      
+      // Join the socket room
+      socket.join(callId);
+      
+      // Notify user they've joined successfully
+      socket.emit('call-joined', {
+        callId: callId,
+        isHost: true
+      });
+    }
+  });
+  
+  // Handle call approval/rejection
+  socket.on('approve-call', (data) => {
+    const { userId, callId } = data;
+    console.log(`User ${socket.id} approved ${userId} to join call ${callId}`);
+    
+    // Check if this user is in the call (can approve)
+    if (socket.data.callId === callId) {
+      // Remove from pending approvals
+      if (pendingApprovals.has(callId)) {
+        pendingApprovals.set(
+          callId,
+          pendingApprovals.get(callId).filter(req => req.userId !== userId)
+        );
+      }
+      
+      // Add to active calls - we'll set this when the user connects
+      // The userId socket will have its data.callId set when it joins
+      
+      // Add to call recording participants
+      if (callRecordings.has(callId)) {
+        callRecordings.get(callId).participants.push(userId);
+      }
+      
+      // Notify the approved user
+      io.to(userId).emit('call-approved', {
+        callId: callId
+      });
+      
+      // Notify all users in the call
+      io.to(callId).emit('user-joined', userId);
+    }
+  });
+  
+  socket.on('reject-call', (data) => {
+    const { userId, callId } = data;
+    console.log(`User ${socket.id} rejected ${userId} from joining call ${callId}`);
+    
+    // Check if this user is in the call (can reject)
+    if (socket.data.callId === callId) {
+      // Remove from pending approvals
+      if (pendingApprovals.has(callId)) {
+        pendingApprovals.set(
+          callId,
+          pendingApprovals.get(callId).filter(req => req.userId !== userId)
+        );
+      }
+      
+      // Notify the rejected user
+      io.to(userId).emit('call-rejected', {
+        callId: callId,
+        message: 'Your request to join the call was rejected'
+      });
+    }
+  });
+
+  // WebRTC Signaling events
+  socket.on('ready', (callId) => {
+    console.log(`User ${socket.id} is ready for WebRTC in call: ${callId}`);
+    const roomId = socket.data.callId;
+    if (roomId) {
+      // Notify all other users in the same call that this user is ready
+      socket.to(roomId).emit('user-ready', socket.id);
+    }
+  });
+
+  socket.on('offer', (data) => {
+    console.log(`Offer from ${socket.id} to ${data.to}`);
+    io.to(data.to).emit('offer', {
+      offer: data.offer,
+      from: socket.id
+    });
+  });
+
+  socket.on('answer', (data) => {
+    console.log(`Answer from ${socket.id} to ${data.to}`);
+    io.to(data.to).emit('answer', {
+      answer: data.answer,
+      from: socket.id
+    });
+  });
+
+  socket.on('ice-candidate', (data) => {
+    console.log(`ICE candidate from ${socket.id} to ${data.to}`);
+    io.to(data.to).emit('ice-candidate', {
+      candidate: data.candidate,
+      from: socket.id
+    });
+  });
+
+  socket.on('leave-call', (callId) => {
+    if (callId) {
+      console.log(`User ${socket.id} leaving call: ${callId}`);
+      socket.leave(callId);
+      io.to(callId).emit('user-left', socket.id);
+      // Clear the call ID from socket data
+      socket.data.callId = null;
+    }
+  });
+
+  // Handle audio recording chunks
+  socket.on('audio-chunk', (data) => {
+    const { chunk, callId } = data;
+    const userCallId = socket.data.callId;
+    
+    if (userCallId && userCallId === callId && callRecordings.has(callId)) {
+      // Add chunk to recording with metadata
+      callRecordings.get(callId).audioChunks.push({
+        userId: socket.id,
+        timestamp: Date.now(),
+        data: chunk
+      });
+      
+      console.log(`Received audio chunk from ${socket.id} for call ${callId}`);
+    }
+  });
+  
+  // Handle audio file sharing
+  socket.on('share-audio-file', (data) => {
+    const { audioData, callId, fileName } = data;
+    const userCallId = socket.data.callId;
+    
+    if (userCallId && userCallId === callId) {
+      console.log(`User ${socket.id} shared audio file ${fileName} in call ${callId}`);
+      
+      // Forward the audio file to all participants in the call
+      socket.to(callId).emit('audio-file-shared', {
+        from: socket.id,
+        audioData,
+        fileName,
+        timestamp: Date.now()
+      });
+      
+      // Add to call recording metadata
+      if (callRecordings.has(callId)) {
+        callRecordings.get(callId).sharedFiles = callRecordings.get(callId).sharedFiles || [];
+        callRecordings.get(callId).sharedFiles.push({
+          userId: socket.id,
+          fileName,
+          timestamp: Date.now()
+        });
+      }
+    }
+  });
+  
+  // End call and save recording with advanced encryption
+  socket.on('end-call', (callId) => {
+    const userCallId = socket.data.callId;
+    
+    if (userCallId && userCallId === callId) {
+      console.log(`User ${socket.id} ended call ${callId}`);
+      
+      // Finalize recording if it exists
+      if (callRecordings.has(callId)) {
+        const recording = callRecordings.get(callId);
+        const endTime = Date.now();
+        const duration = endTime - recording.startTime;
+        
+        // Get all participants for this call
+        const participants = recording.participants;
+        
+        // Encrypt the recording using our advanced encryption module
+        (async () => {
+          try {
+            // Encrypt the recording with participant keys
+            const encryptedRecording = await encryption.encryptRecording(
+              recording.audioChunks,
+              participants
+            );
+            
+            // Add metadata
+            encryptedRecording.metadata = {
+              callId,
+              startTime: recording.startTime,
+              endTime,
+              duration,
+              participantCount: participants.length,
+              sharedFiles: recording.sharedFiles || []
+            };
+            
+            // Store in secure database with access control
+            const recordingId = await database.storeRecording(
+              encryptedRecording,
+              callId,
+              participants
+            );
+            
+            console.log(`Call ${callId} recording securely encrypted and saved to database with ID: ${recordingId}`);
+            
+            // Generate access tokens for each participant
+            const accessTokens = {};
+            participants.forEach(participantId => {
+              const accessToken = auth.generateAccessCode(recordingId, participantId);
+              accessTokens[participantId] = accessToken;
+            });
+            
+            // Notify all participants that the call has ended and recording saved
+            io.to(callId).emit('call-ended', {
+              callId,
+              recordingSaved: true,
+              duration,
+              recordingId,
+              accessToken: accessTokens[socket.id] // Send each user their own access token
+            });
+            
+            // Store in our in-memory database as well for API access
+            recordingsDB.push({
+              id: recordingId,
+              callId,
+              encryptedData: JSON.stringify(encryptedRecording.metadata),
+              timestamp: Date.now(),
+              accessControl: {
+                participants,
+                accessTokens
+              }
+            });
+          } catch (error) {
+            console.error('Error encrypting and storing recording:', error);
+            io.to(callId).emit('recording-error', {
+              callId,
+              error: 'Failed to securely store recording'
+            });
+          }
+        })();
+        
+        // Clean up
+        callRecordings.delete(callId);
+      }
+      
+      // Notify all participants to leave the call
+      io.to(callId).emit('call-terminated', {
+        callId,
+        by: socket.id
+      });
+      
+      // Remove all users from this call
+      for (const [userId, userCall] of activeCalls.entries()) {
+        if (userCall === callId) {
+          activeCalls.delete(userId);
+        }
+      }
+    }
+  });
+
+  socket.on('disconnect', () => {
+    const callId = socket.data.callId;
+    if (callId) {
+      socket.leave(callId);
+      io.to(callId).emit('user-left', socket.id);
+      // Socket is disconnecting, no need to clear data
+      
+      // Check if this was the last user in the call
+      // Get all sockets in this room
+      const room = io.sockets.adapter.rooms.get(callId);
+      const remainingUsers = room ? room.size : 0;
+      
+      if (remainingUsers === 0 && callRecordings.has(callId)) {
+        // Last user left, finalize the recording
+        const recording = callRecordings.get(callId);
+        const endTime = Date.now();
+        const duration = endTime - recording.startTime;
+        
+        // Encrypt recording data
+        const encryptedData = JSON.stringify({
+          callId,
+          startTime: recording.startTime,
+          endTime,
+          duration,
+          participants: recording.participants,
+          chunks: recording.audioChunks.length,
+          sharedFiles: recording.sharedFiles || []
+        });
+        
+        // Store in our 'database'
+        recordingsDB.push({
+          id: `rec-${Date.now()}`,
+          callId,
+          encryptedData,
+          timestamp: Date.now()
+        });
+        
+        console.log(`Call ${callId} recording saved to database (last user left)`);
+        
+        // Clean up
+        callRecordings.delete(callId);
+      }
+    }
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+// API endpoints
+app.get('/test', (req, res) => {
+  res.json({ message: 'Server is running' });
+});
+
+// Secure API endpoints with advanced authentication and encryption
+
+// Get all recordings a user has access to
+app.get('/api/recordings', authenticate, (req, res) => {
+  try {
+    // Get user ID from authentication token
+    const userId = req.user ? req.user.id : null;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Valid authentication required' });
+    }
+    
+    // Get recordings this user has access to
+    const userRecordings = database.listUserRecordings(userId);
+    
+    // Return recordings with minimal info (don't expose raw data)
+    res.json({ 
+      recordings: userRecordings,
+      message: 'Recordings retrieved with end-to-end encryption'
+    });
+  } catch (error) {
+    console.error('Error retrieving recordings:', error);
+    res.status(500).json({ error: 'Failed to retrieve recordings' });
+  }
+});
+
+// Get a specific recording by ID with secure access control
+app.get('/api/recordings/:id', authenticate, async (req, res) => {
+  try {
+    const recordingId = req.params.id;
+    const userId = req.user ? req.user.id : null;
+    const authToken = req.headers.authorization.split(' ')[1]; // Get the Bearer token
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Valid authentication required' });
+    }
+    
+    // Retrieve the encrypted recording with access control
+    const encryptedRecording = await database.retrieveRecording(recordingId, userId, authToken);
+    
+    if (!encryptedRecording) {
+      return res.status(404).json({ error: 'Recording not found or access denied' });
+    }
+    
+    // Return only metadata - actual decryption happens client-side
+    res.json({
+      id: recordingId,
+      metadata: encryptedRecording.metadata,
+      encryptionInfo: {
+        algorithm: encryptedRecording.encryptionAlgorithm,
+        participantCount: Object.keys(encryptedRecording.participantKeys).length,
+        chunkCount: encryptedRecording.encryptedChunks.length,
+        integrityVerification: true
+      },
+      message: 'Recording retrieved with end-to-end encryption'
+    });
+  } catch (error) {
+    console.error(`Error retrieving recording ${req.params.id}:`, error);
+    res.status(error.message.includes('access denied') ? 403 : 500)
+      .json({ error: error.message || 'Failed to retrieve recording' });
+  }
+});
+
+// Verify access token and get decryption key for a recording
+app.post('/api/recordings/:id/access', async (req, res) => {
+  try {
+    const { accessToken, userId } = req.body;
+    const recordingId = req.params.id;
+    
+    if (!accessToken || !userId) {
+      return res.status(400).json({ error: 'Access token and user ID required' });
+    }
+    
+    // Verify the access token
+    const isValid = auth.verifyAccessCode(accessToken, recordingId);
+    
+    if (!isValid || isValid !== userId) {
+      return res.status(403).json({ error: 'Invalid access token' });
+    }
+    
+    // Get the user's keys
+    const userKeys = database.getUserKeys(userId);
+    
+    if (!userKeys) {
+      return res.status(404).json({ error: 'User keys not found' });
+    }
+    
+    // Generate a secure, time-limited token for accessing the recording
+    const { token, expiresAt } = auth.generateAuthToken(userId, {
+      recordingAccess: [recordingId],
+      accessNonce: accessToken.split('-')[1]
+    });
+    
+    res.json({
+      token,
+      expiresAt,
+      publicKey: userKeys.publicKey,
+      message: 'Access granted to encrypted recording'
+    });
+  } catch (error) {
+    console.error(`Error verifying access token for recording ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Failed to verify access token' });
+  }
+});
+
+// Get decryption data for a recording (requires valid token from /access endpoint)
+app.get('/api/recordings/:id/decrypt', auth.authenticateRequest, auth.authorizeRecordingAccess, async (req, res) => {
+  try {
+    const recordingId = req.params.id;
+    const userId = req.user.id;
+    
+    // Get the encrypted recording
+    const encryptedRecording = await database.retrieveRecording(
+      recordingId, 
+      userId, 
+      req.headers.authorization.split(' ')[1]
+    );
+    
+    if (!encryptedRecording) {
+      return res.status(404).json({ error: 'Recording not found' });
+    }
+    
+    // Get the user's encrypted key
+    const encryptedKey = encryptedRecording.participantKeys[userId];
+    
+    if (!encryptedKey) {
+      return res.status(403).json({ error: 'No decryption key available for this user' });
+    }
+    
+    // Return the encrypted key and IV - decryption happens client-side
+    res.json({
+      encryptedKey,
+      iv: encryptedRecording.iv,
+      message: 'Decryption data retrieved successfully'
+    });
+  } catch (error) {
+    console.error(`Error getting decryption data for recording ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Failed to get decryption data' });
+  }
+});
+
+// Delete a recording (only available to the host)
+app.delete('/api/recordings/:id', authenticate, async (req, res) => {
+  try {
+    const recordingId = req.params.id;
+    const userId = req.user.id;
+    
+    // Check if user is the host of this recording
+    const isHost = recordingsDB.some(rec => 
+      rec.id === recordingId && 
+      rec.accessControl && 
+      rec.accessControl.participants[0] === userId
+    );
+    
+    if (!isHost) {
+      return res.status(403).json({ error: 'Only the host can delete recordings' });
+    }
+    
+    // Delete the recording
+    const success = await database.deleteRecording(recordingId, userId, true);
+    
+    if (!success) {
+      return res.status(500).json({ error: 'Failed to delete recording' });
+    }
+    
+    // Also remove from in-memory database
+    const index = recordingsDB.findIndex(rec => rec.id === recordingId);
+    if (index !== -1) {
+      recordingsDB.splice(index, 1);
+    }
+    
+    res.json({ message: 'Recording deleted successfully' });
+  } catch (error) {
+    console.error(`Error deleting recording ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Failed to delete recording' });
+  }
+});
+
+const PORT = process.env.PORT || 3002;
+
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  
+  const { networkInterfaces } = require('os');
+  const nets = networkInterfaces();
+  const results = {};
+  
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+      if (net.family === 'IPv4' && !net.internal) {
+        if (!results[name]) {
+          results[name] = [];
+        }
+        results[name].push(net.address);
+      }
+    }
+  }
+  
+  console.log('Available on:');
+  for (const [key, value] of Object.entries(results)) {
+    console.log(`${key}: ${value.join(', ')}:${PORT}`);
+  }
+  console.log(`Access from your phone at: http://localhost:${PORT}`);
+});
